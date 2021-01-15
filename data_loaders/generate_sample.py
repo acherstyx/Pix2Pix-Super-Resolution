@@ -36,10 +36,10 @@ class ImageSampler(DataLoaderTemplate):
                                                        self.config.UP_SIZE,
                                                        False)
             # size 2
-            image_down = self.__generate_sample_and_save(image_file_path,
-                                                         None,
-                                                         self.config.DOWN_SIZE,
-                                                         False)
+            image_down = cv.resize(self.__generate_sample_and_save(image_file_path,
+                                                                   None,
+                                                                   self.config.DOWN_SIZE,
+                                                                   False), self.config.UP_SIZE)
             yield image_down / 255, image_up / 255
 
     def load(self, *args):
@@ -47,7 +47,7 @@ class ImageSampler(DataLoaderTemplate):
         self.dataset = tf.data.Dataset.from_generator(
             generator=lambda: self.down_sample(),
             output_types=(tf.float32, tf.float32),
-            output_shapes=(self.config.DOWN_SIZE + (3,),
+            output_shapes=(self.config.UP_SIZE + (3,),
                            self.config.UP_SIZE + (3,))
         ).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
         self.dataset.prefetch(1)
