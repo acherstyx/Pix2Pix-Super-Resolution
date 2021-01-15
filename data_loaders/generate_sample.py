@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 class ImageSampler(DataLoaderTemplate):
     def __init__(self, config):
+        self.__BATCH_SIZE = 1
+
         super(ImageSampler, self).__init__(config)
         self.config: ImageSamplerConfig
 
@@ -38,14 +40,17 @@ class ImageSampler(DataLoaderTemplate):
                                                          None,
                                                          self.config.DOWN_SIZE,
                                                          False)
-            yield image_up, image_down
+            yield image_down / 255, image_up / 255
 
     def load(self, *args):
         self.config: ImageSamplerConfig
-        self.dataset = tf.data.Dataset.from_generator(generator=lambda: self.down_sample(),
-                                                      output_types=(tf.float32, tf.float32),
-                                                      output_shapes=(self.config.UP_SIZE + (3,),
-                                                                     self.config.DOWN_SIZE + (3,)))
+        self.dataset = tf.data.Dataset.from_generator(
+            generator=lambda: self.down_sample(),
+            output_types=(tf.float32, tf.float32),
+            output_shapes=(self.config.DOWN_SIZE + (3,),
+                           self.config.UP_SIZE + (3,))
+        ).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
+        self.dataset.prefetch(1)
 
 
 class ImageSamplerConfig(ConfigTemplate):
@@ -60,16 +65,18 @@ class ImageSamplerConfig(ConfigTemplate):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    my_instance = ImageSampler(ImageSamplerConfig(origin_image_dir="./data/origion",
+    my_instance = ImageSampler(ImageSamplerConfig(origin_image_dir="./data/origin",
                                                   up_size=(1000, 1000),
                                                   down_size=(200, 200)))
 
     loader = my_instance.get_dataset()
 
-    for a, b in loader:
-        # print(a.numpy(),b.numpy())
-        cv.imshow("imagea", a.numpy()/256.0)
-        cv.waitKey(0)
+    for batch_data in loader:
+        a = batch_data[0][0]
+        b = batch_data[1][0]
+        # print(a.numpy().shape, b.numpy().shape)
+        cv.imshow("a", a.numpy())
+        cv.waitKey(10)
 
-        cv.imshow("imageb", b.numpy()/256.0)
-        cv.waitKey(0)
+        cv.imshow("b", b.numpy())
+        cv.waitKey(10)

@@ -3,6 +3,7 @@ data/
 cache
 
 .idea
+models/*.png
 
 
 # Byte-compiled / optimized / DLL files
