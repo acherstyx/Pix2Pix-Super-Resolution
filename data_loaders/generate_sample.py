@@ -66,7 +66,7 @@ class ImageSamplerConfig(ConfigTemplate):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     my_instance = ImageSampler(ImageSamplerConfig(origin_image_dir="./data/origin",
-                                                  up_size=(1000, 1000),
+                                                  up_size=(512, 512),
                                                   down_size=(200, 200)))
 
     loader = my_instance.get_dataset()
@@ -79,4 +79,4 @@ if __name__ == '__main__':
         cv.waitKey(10)
 
         cv.imshow("b", b.numpy())
-        cv.waitKey(10)
+        cv.waitKey(0)
