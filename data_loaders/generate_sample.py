@@ -3,15 +3,13 @@ import logging
 import cv2 as cv
 import tensorflow as tf
 
-from templates.utils import mkdir
-
 logger = logging.getLogger(__name__)
 
 
 class ImageSampler:
     def __init__(self,
-                 batch_size,
                  origin_image_dir,
+                 batch_size,
                  up_size,
                  down_size,
                  prefetch=10):
@@ -22,7 +20,7 @@ class ImageSampler:
         self.__UP_SIZE = up_size
         self.__DOWN_SIZE = down_size
         self.__PREFETCH = prefetch
-        self.dataset = None
+        self._dataset = None
         self.__load()
 
     @staticmethod
@@ -54,13 +52,16 @@ class ImageSampler:
             yield (image_down * 2.0) / 255 - 1.0, (image_up * 2.0) / 255 - 1.0
 
     def __load(self, *args):
-        self.dataset = tf.data.Dataset.from_generator(
+        self._dataset = tf.data.Dataset.from_generator(
             generator=lambda: self.__down_sample(),
             output_types=(tf.float32, tf.float32),
             output_shapes=(self.__UP_SIZE + (3,),
                            self.__UP_SIZE + (3,))
         ).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
-        self.dataset.prefetch(self.__PREFETCH)
+        self._dataset.prefetch(self.__PREFETCH)
+
+    def get_dataset(self):
+        return self._dataset
 
 
 if __name__ == '__main__':
@@ -68,7 +69,7 @@ if __name__ == '__main__':
     loader = ImageSampler(batch_size=10,
                           origin_image_dir="./data/origin",
                           up_size=(512, 512),
-                          down_size=(300, 300)).dataset
+                          down_size=(300, 300)).get_dataset()
 
     for batch_data in loader:
         a = batch_data[0][0]

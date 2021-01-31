@@ -1,14 +1,25 @@
+import logging
+import cv2
+import numpy as np
 import tensorflow as tf
 
 from tensorflow.keras import layers, Model, optimizers, losses, metrics, Sequential
 
+logger = logging.getLogger(__name__)
 
-class Pix2Pix:
+
+class Pix2Pix256:
     def __init__(self, learning_rate=0.001, epoch=1):
         self.__LR = learning_rate
         self.__EPOCH = epoch
 
+        self._generator = None
+        self._discriminator = None
+
         self.__build()
+
+        self.__generator_optimizer = optimizers.Adam(learning_rate, beta_1=0.5)
+        self.__discriminator_optimizer = optimizers.Adam(learning_rate, beta_1=0.5)
 
     def __build(self):
         def create_generator():
@@ -56,7 +67,7 @@ class Pix2Pix:
 
                 return up_sample_layer
 
-            inputs = layers.Input(shape=[512, 512, 3])
+            inputs = layers.Input(shape=[256, 256, 3])
 
             down_stack = [
                 down_sample(64, 4, batch_norm=False),  # 128, 128, 64
@@ -116,9 +127,9 @@ class Pix2Pix:
         def create_discriminator():
             initializer = tf.random_normal_initializer(0., 0.02)
 
-            init_inputs = layers.Input(shape=(512, 512, 3), dtype=tf.float32)
+            init_inputs = layers.Input(shape=(256, 256, 3), dtype=tf.float32)
 
-            target_inputs = layers.Input(shape=(512, 512, 3), dtype=tf.float32)
+            target_inputs = layers.Input(shape=(256, 256, 3), dtype=tf.float32)
 
             hidden_layer = layers.Concatenate()([init_inputs, target_inputs])
 
@@ -147,19 +158,10 @@ class Pix2Pix:
                                          activation=None)(hidden_layer)
             hidden_layer = layers.BatchNormalization()(hidden_layer)
             hidden_layer = layers.LeakyReLU()(hidden_layer)
-
-            hidden_layer = layers.Conv2D(filters=512,
-                                         kernel_size=4,
-                                         strides=2,
-                                         padding="SAME",
-                                         kernel_initializer=initializer,
-                                         activation=None)(hidden_layer)
-            hidden_layer = layers.BatchNormalization()(hidden_layer)
-            hidden_layer = layers.LeakyReLU()(hidden_layer)
-            assert tuple(hidden_layer.shape) == (None, 32, 32, 512)
+            assert tuple(hidden_layer.shape) == (None, 32, 32, 256)
 
             hidden_layer = layers.ZeroPadding2D(padding=(1, 1))(hidden_layer)
-            assert tuple(hidden_layer.shape) == (None, 34, 34, 512)
+            assert tuple(hidden_layer.shape) == (None, 34, 34, 256)
 
             hidden_layer = layers.Conv2D(filters=512,
                                          kernel_size=4,
@@ -183,17 +185,69 @@ class Pix2Pix:
             return Model(inputs=[init_inputs, target_inputs],
                          outputs=output_layer)
 
-        self.model = (create_generator(), create_discriminator())
+        self._generator = create_generator()
+        self._discriminator = create_discriminator()
 
-        tf.keras.utils.plot_model(self.model[0], to_file="generator.png", expand_nested=True, show_shapes=True,
+        tf.keras.utils.plot_model(self._generator, to_file="generator.png", expand_nested=True,
+                                  show_shapes=True,
                                   dpi=50)
-        tf.keras.utils.plot_model(self.model[1], to_file="discriminator.png", expand_nested=True, show_shapes=True,
+        tf.keras.utils.plot_model(self._discriminator, to_file="discriminator.png", expand_nested=True,
+                                  show_shapes=True,
                                   dpi=50)
+
+    @staticmethod
+    def __generator_loss(real_image, generate_image, discriminator_output):
+        discriminate_loss = losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(discriminator_output),
+                                                                        discriminator_output)
+        generate_loss = losses.MeanAbsoluteError()(real_image, generate_image)
+        return discriminate_loss + generate_loss * 100
+
+    @staticmethod
+    def __discriminator_loss(discriminator_real_output, discriminator_fake_output):
+        real_loss = losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(discriminator_real_output),
+                                                                discriminator_real_output)
+        fake_loss = losses.BinaryCrossentropy(from_logits=True)(tf.zeros_like(discriminator_fake_output),
+                                                                discriminator_fake_output)
+        return real_loss + fake_loss
+
+    def __train_step(self, input_image, target_image):
+        self._generator: Model
+        self._discriminator: Model
+        with tf.GradientTape() as generator_tape, tf.GradientTape() as discriminator_tape:
+            generate_image = self._generator(input_image, training=True)
+
+            discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
+            discriminator_real_output = self._discriminator([input_image, target_image], training=True)
+
+            generator_loss = self.__generator_loss(target_image, generate_image, discriminator_fake_output)
+            discriminator_loss = self.__discriminator_loss(discriminator_real_output, discriminator_fake_output)
+
+        generator_gradient = generator_tape.gradient(generator_loss,
+                                                     self._generator.trainable_variables)
+        discriminator_gradient = discriminator_tape.gradient(discriminator_loss,
+                                                             self._discriminator.trainable_variables)
+
+        self.__generator_optimizer.apply_gradients(
+            zip(generator_gradient, self._generator.trainable_variables)
+        )
+        self.__discriminator_optimizer.apply_gradients(
+            zip(discriminator_gradient, self._discriminator.trainable_variables)
+        )
+
+        return generator_loss, discriminator_loss
 
     def train(self, dataset):
         for epoch in range(self.__EPOCH):
-            pass
+            print("Epoch {}/{}".format(epoch + 1, self.__EPOCH))
+            for input_image, target_image in dataset:
+                generator_loss, discriminator_loss = self.__train_step(input_image, target_image)
+                print("Generator Loss: {}     Discriminator Loss: {}".format(generator_loss, discriminator_loss))
 
-
-if __name__ == '__main__':
-    my_instance = Pix2Pix()
+    def predict(self, sample_image):
+        sample_image_target = cv2.resize(sample_image, (256, 256))
+        sample_image_resized = cv2.resize(sample_image, (128, 128))
+        sample_image_resized = cv2.resize(sample_image_resized, (256, 256))
+        sample_image_reshaped = np.reshape(sample_image_resized, (1, 256, 256, 3))
+        return (sample_image_target,
+                sample_image_resized,
+                (self._generator((sample_image_reshaped * 2.0) / 255 - 1.0).numpy()[0] + 1) / 2)
