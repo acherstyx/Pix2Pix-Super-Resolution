@@ -1,17 +1,16 @@
 import tensorflow as tf
 
 from tensorflow.keras import layers, Model, optimizers, losses, metrics, Sequential
-from templates import ModelTemplate
 
 
-class Pix2Pix(ModelTemplate):
+class Pix2Pix:
     def __init__(self, learning_rate=0.001, epoch=1):
         self.__LR = learning_rate
         self.__EPOCH = epoch
 
-        super(Pix2Pix, self).__init__(None)
+        self.__build()
 
-    def build(self):
+    def __build(self):
         def create_generator():
             initializer = tf.random_normal_initializer(0., 0.02)
 
@@ -184,13 +183,12 @@ class Pix2Pix(ModelTemplate):
             return Model(inputs=[init_inputs, target_inputs],
                          outputs=output_layer)
 
-        self.model = create_discriminator()
-
-        self.show_summary(with_plot=True)
-
         self.model = (create_generator(), create_discriminator())
 
-        return self
+        tf.keras.utils.plot_model(self.model[0], to_file="generator.png", expand_nested=True, show_shapes=True,
+                                  dpi=50)
+        tf.keras.utils.plot_model(self.model[1], to_file="discriminator.png", expand_nested=True, show_shapes=True,
+                                  dpi=50)
 
     def train(self, dataset):
         for epoch in range(self.__EPOCH):
@@ -199,4 +197,3 @@ class Pix2Pix(ModelTemplate):
 
 if __name__ == '__main__':
     my_instance = Pix2Pix()
-    my_instance.show_summary(with_plot=True)
