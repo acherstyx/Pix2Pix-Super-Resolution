@@ -3,8 +3,7 @@ data/
 cache
 
 .idea
-models/*.png
-
+*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

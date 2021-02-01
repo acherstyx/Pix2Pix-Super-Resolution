@@ -196,7 +196,7 @@ class Pix2Pix256:
         discriminate_loss = losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(discriminator_output),
                                                                         discriminator_output)
         generate_loss = losses.MeanAbsoluteError()(real_image, generate_image)
-        return discriminate_loss + generate_loss * 100
+        return discriminate_loss * 4 + generate_loss * 100
 
     @staticmethod
     def __discriminator_loss(discriminator_real_output, discriminator_fake_output):
@@ -212,9 +212,10 @@ class Pix2Pix256:
         with tf.GradientTape() as generator_tape, tf.GradientTape() as discriminator_tape:
             generate_image = self._generator(input_image, training=True)
 
-            cv2.imshow("Current input", (input_image.numpy()[0] + 1) / 2)
-            cv2.imshow("Current output", (generate_image.numpy()[0] + 1) / 2)
-            cv2.imshow("Current target", (target_image.numpy()[0] + 1) / 2)
+            combine = np.concatenate([(input_image.numpy()[0] + 1) / 2,
+                                      (generate_image.numpy()[0] + 1) / 2,
+                                      (target_image.numpy()[0] + 1) / 2], axis=1)
+            cv2.imshow("Training", combine)
             cv2.waitKey(1)
 
             discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
