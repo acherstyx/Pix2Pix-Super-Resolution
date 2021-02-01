@@ -12,7 +12,7 @@ class ImageSampler:
                  batch_size,
                  up_size,
                  down_size,
-                 prefetch=10):
+                 prefetch=1):
         super(ImageSampler, self).__init__()
 
         self.__BATCH_SIZE = batch_size
@@ -57,7 +57,7 @@ class ImageSampler:
             output_types=(tf.float32, tf.float32),
             output_shapes=(self.__UP_SIZE + (3,),
                            self.__UP_SIZE + (3,))
-        ).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
+        ).shuffle(10).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
         self._dataset.prefetch(self.__PREFETCH)
 
     def get_dataset(self):

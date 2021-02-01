@@ -216,6 +216,11 @@ class Pix2Pix256:
         with tf.GradientTape() as generator_tape, tf.GradientTape() as discriminator_tape:
             generate_image = self._generator(input_image, training=True)
 
+            cv2.imshow("Current input", input_image.numpy()[0])
+            cv2.imshow("Current output", generate_image.numpy()[0])
+            cv2.imshow("Current target", target_image.numpy()[0])
+            cv2.waitKey(1)
+
             discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
             discriminator_real_output = self._discriminator([input_image, target_image], training=True)
 
