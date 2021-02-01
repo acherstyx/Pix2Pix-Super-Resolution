@@ -28,7 +28,6 @@ class ImageSampler:
         image = cv.imread(in_path)
         image = cv.resize(image, new_size)
         if write_image:
-            mkdir(out_path)
             cv.imwrite(out_path, image)
         return image
 
@@ -66,10 +65,10 @@ class ImageSampler:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    loader = ImageSampler(batch_size=10,
-                          origin_image_dir="./data/origin",
-                          up_size=(512, 512),
-                          down_size=(300, 300)).get_dataset()
+    loader = ImageSampler(origin_image_dir="../data/origin",
+                          batch_size=1,
+                          up_size=(256, 256),
+                          down_size=(128, 128)).get_dataset()
 
     for batch_data in loader:
         a = batch_data[0][0]

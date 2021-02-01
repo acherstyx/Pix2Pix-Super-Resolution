@@ -117,10 +117,6 @@ class Pix2Pix256:
             # create model
             generator = Model(inputs=inputs,
                               outputs=outputs)
-            # compile
-            generator.compile(optimizer=optimizers.Adam(learning_rate=self.__LR),
-                              loss=losses.MeanAbsoluteError(),
-                              metrics=[metrics.MeanAbsoluteError()])
 
             return generator
 
@@ -216,9 +212,9 @@ class Pix2Pix256:
         with tf.GradientTape() as generator_tape, tf.GradientTape() as discriminator_tape:
             generate_image = self._generator(input_image, training=True)
 
-            cv2.imshow("Current input", input_image.numpy()[0])
-            cv2.imshow("Current output", generate_image.numpy()[0])
-            cv2.imshow("Current target", target_image.numpy()[0])
+            cv2.imshow("Current input", (input_image.numpy()[0] + 1) / 2)
+            cv2.imshow("Current output", (generate_image.numpy()[0] + 1) / 2)
+            cv2.imshow("Current target", (target_image.numpy()[0] + 1) / 2)
             cv2.waitKey(1)
 
             discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
@@ -247,12 +243,23 @@ class Pix2Pix256:
             for input_image, target_image in dataset:
                 generator_loss, discriminator_loss = self.__train_step(input_image, target_image)
                 print("Generator Loss: {}     Discriminator Loss: {}".format(generator_loss, discriminator_loss))
+        cv2.destroyWindow("Current input")
+        cv2.destroyWindow("Current output")
+        cv2.destroyWindow("Current target")
 
     def predict(self, sample_image):
-        sample_image_target = cv2.resize(sample_image, (256, 256))
-        sample_image_resized = cv2.resize(sample_image, (128, 128))
-        sample_image_resized = cv2.resize(sample_image_resized, (256, 256))
-        sample_image_reshaped = np.reshape(sample_image_resized, (1, 256, 256, 3))
+        sample_image = (sample_image.copy() * 2.0) / 255 - 1.0
+        sample_image_target = cv2.resize(sample_image.copy(), (256, 256))
+        sample_image_resized = cv2.resize(sample_image.copy(), (128, 128))
+        sample_image_resized = cv2.resize(sample_image_resized.copy(), (256, 256))
+        sample_image_reshaped = np.reshape(sample_image_resized.copy(), (1, 256, 256, 3))
+
+        gen_output = self._generator(sample_image_reshaped, training=True).numpy()[0]
+
+        gen_output = (gen_output + 1.0) / 2.0
+        sample_image_target = (sample_image_target + 1.0) / 2.0
+        sample_image_resized = (sample_image_resized + 1.0) / 2.0
+
         return (sample_image_target,
                 sample_image_resized,
-                (self._generator((sample_image_reshaped * 2.0) / 255 - 1.0).numpy()[0] + 1) / 2)
+                gen_output)
