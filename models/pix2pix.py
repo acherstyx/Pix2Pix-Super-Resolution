@@ -244,9 +244,6 @@ class Pix2Pix256:
             for input_image, target_image in dataset:
                 generator_loss, discriminator_loss = self.__train_step(input_image, target_image)
                 print("Generator Loss: {}     Discriminator Loss: {}".format(generator_loss, discriminator_loss))
-        cv2.destroyWindow("Current input")
-        cv2.destroyWindow("Current output")
-        cv2.destroyWindow("Current target")
 
     def predict(self, sample_image):
         sample_image = (sample_image.copy() * 2.0) / 255 - 1.0
