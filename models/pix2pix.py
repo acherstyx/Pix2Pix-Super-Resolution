@@ -1,9 +1,11 @@
 import logging
 import cv2
+import os
 import numpy as np
 import tensorflow as tf
 
 from tensorflow.keras import layers, Model, optimizers, losses, metrics, Sequential
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -206,17 +208,18 @@ class Pix2Pix256:
                                                                 discriminator_fake_output)
         return real_loss + fake_loss
 
-    def __train_step(self, input_image, target_image):
+    def __train_step(self, input_image, target_image, with_preview):
         self._generator: Model
         self._discriminator: Model
         with tf.GradientTape() as generator_tape, tf.GradientTape() as discriminator_tape:
             generate_image = self._generator(input_image, training=True)
 
-            combine = np.concatenate([(input_image.numpy()[0] + 1) / 2,
-                                      (generate_image.numpy()[0] + 1) / 2,
-                                      (target_image.numpy()[0] + 1) / 2], axis=1)
-            cv2.imshow("Training", combine)
-            cv2.waitKey(1)
+            if with_preview:
+                combine = np.concatenate([(input_image.numpy()[0] + 1) / 2,
+                                          (generate_image.numpy()[0] + 1) / 2,
+                                          (target_image.numpy()[0] + 1) / 2], axis=1)
+                cv2.imshow("Training", combine)
+                cv2.waitKey(1)
 
             discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
             discriminator_real_output = self._discriminator([input_image, target_image], training=True)
@@ -238,12 +241,22 @@ class Pix2Pix256:
 
         return generator_loss, discriminator_loss
 
-    def train(self, dataset):
-        for epoch in range(self.__EPOCH):
-            print("Epoch {}/{}".format(epoch + 1, self.__EPOCH))
-            for input_image, target_image in dataset:
-                generator_loss, discriminator_loss = self.__train_step(input_image, target_image)
-                print("Generator Loss: {}     Discriminator Loss: {}".format(generator_loss, discriminator_loss))
+    def train(self, dataset, epoch=None, with_preview=False):
+        log = []
+
+        if epoch is None:
+            epoch = self.__EPOCH
+        for i in range(epoch):
+            bar = tqdm(dataset)
+            for input_image, target_image in bar:
+                generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
+                bar.set_description("Epoch {}/{}".format(i + 1, epoch))
+                bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
+                log.append([generator_loss, discriminator_loss])
+            bar.close()
+        if with_preview:
+            cv2.destroyWindow("Training")
+        return log
 
     def predict(self, sample_image):
         sample_image = (sample_image.copy() * 2.0) / 255 - 1.0
@@ -261,3 +274,23 @@ class Pix2Pix256:
         return (sample_image_target,
                 sample_image_resized,
                 gen_output)
+
+    def save(self, gen_save_path, disc_save_path):
+        for a_dir in [gen_save_path, disc_save_path]:
+            directory = os.path.split(a_dir)[0]
+
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+
+        self._generator: tf.keras.Model
+        self._discriminator: tf.keras.Model
+
+        self._generator.save(gen_save_path)
+        self._discriminator.save(disc_save_path)
+
+    def load(self, gen_save_path, disc_save_path):
+        self._generator: tf.keras.Model
+        self._discriminator: tf.keras.Model
+
+        self._generator.load_weights(gen_save_path)
+        self._discriminator.load_weights(disc_save_path)

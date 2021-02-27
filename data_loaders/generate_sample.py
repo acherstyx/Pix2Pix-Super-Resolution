@@ -12,7 +12,9 @@ class ImageSampler:
                  batch_size,
                  up_size,
                  down_size,
-                 prefetch=1):
+                 shuffle=10,
+                 prefetch=1,
+                 low_memory=True):
         super(ImageSampler, self).__init__()
 
         self.__BATCH_SIZE = batch_size
@@ -20,6 +22,10 @@ class ImageSampler:
         self.__UP_SIZE = up_size
         self.__DOWN_SIZE = down_size
         self.__PREFETCH = prefetch
+        self.__SHUFFLE = shuffle
+        # save result of first epoch in mem
+        self.__LOW_MEM = low_memory
+        self.__CACHE = []
         self._dataset = None
         self.__load()
 
@@ -33,22 +39,30 @@ class ImageSampler:
 
     def __down_sample(self):
         org_sample_image = os.listdir(self.__ORIGIN_IMAGE_DIR)
-        for index, image_file_name in enumerate(org_sample_image):
-            image_file_path = os.path.join(self.__ORIGIN_IMAGE_DIR, image_file_name)
-            if not os.path.isfile(image_file_path):
-                continue
-            # size 1
-            image_up = self.__generate_sample_and_save(image_file_path,
-                                                       None,
-                                                       self.__UP_SIZE,
-                                                       False)
-            # size 2
-            image_down = cv.resize(self.__generate_sample_and_save(image_file_path,
-                                                                   None,
-                                                                   self.__DOWN_SIZE,
-                                                                   False), self.__UP_SIZE)
-            # (-1,1)
-            yield (image_down * 2.0) / 255 - 1.0, (image_up * 2.0) / 255 - 1.0
+        if not self.__CACHE:
+            for index, image_file_name in enumerate(org_sample_image):
+                image_file_path = os.path.join(self.__ORIGIN_IMAGE_DIR, image_file_name)
+                if not os.path.isfile(image_file_path):
+                    continue
+                # size 1
+                image_up = self.__generate_sample_and_save(image_file_path,
+                                                           None,
+                                                           self.__UP_SIZE,
+                                                           False)
+                image_up = (image_up * 2.0) / 255 - 1.0
+                # size 2
+                image_down = cv.resize(self.__generate_sample_and_save(image_file_path,
+                                                                       None,
+                                                                       self.__DOWN_SIZE,
+                                                                       False), self.__UP_SIZE)
+                image_down = (image_down * 2.0) / 255 - 1.0
+                if not self.__LOW_MEM:
+                    self.__CACHE.append([image_down, image_up])
+                yield image_down, image_up
+        else:
+            logger.debug("Data loader is using cache.")
+            for image_down, image_up in self.__CACHE:
+                yield image_down, image_up
 
     def __load(self, *args):
         self._dataset = tf.data.Dataset.from_generator(
@@ -56,7 +70,7 @@ class ImageSampler:
             output_types=(tf.float32, tf.float32),
             output_shapes=(self.__UP_SIZE + (3,),
                            self.__UP_SIZE + (3,))
-        ).shuffle(10).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
+        ).shuffle(self.__SHUFFLE).batch(batch_size=self.__BATCH_SIZE, drop_remainder=True)
         self._dataset.prefetch(self.__PREFETCH)
 
     def get_dataset(self):
