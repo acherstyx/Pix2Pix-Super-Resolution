@@ -27,16 +27,17 @@ if __name__ == '__main__':
                            shuffle=100,
                            up_size=(256, 256),
                            down_size=(128, 128)).get_dataset()
-    model = Pix2Pix256(learning_rate=0.0001)
+    model = Pix2Pix256(learning_rate=0.0001,
+                       tf_board_path="../logs/super_resolution/tf_board/record")
 
     try:
         model.load("../logs/super_resolution/save_weight/generator.h5",
                    "../logs/super_resolution/save_weight/discriminator.h5")
     except OSError:
         pass
-    # model.train(dataset, epoch=10, with_preview=True)
-    # model.save("../logs/super_resolution/save_weight/generator.h5",
-    #            "../logs/super_resolution/save_weight/discriminator.h5")
+    model.train(dataset, epoch=10, with_preview=True)
+    model.save("../logs/super_resolution/save_weight/generator.h5",
+               "../logs/super_resolution/save_weight/discriminator.h5")
 
     sample_image = cv2.imread("../data/origin/1.jpg")
     gen_output = sample_image

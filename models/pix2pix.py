@@ -1,6 +1,7 @@
 import logging
 import cv2
 import os
+import datetime
 import numpy as np
 import tensorflow as tf
 
@@ -11,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class Pix2Pix256:
-    def __init__(self, learning_rate=0.001, epoch=1):
+    def __init__(self, learning_rate=0.001, epoch=1,
+                 tf_board_path=None):
         self.__LR = learning_rate
         self.__EPOCH = epoch
 
@@ -22,6 +24,15 @@ class Pix2Pix256:
 
         self.__generator_optimizer = optimizers.Adam(learning_rate, beta_1=0.5)
         self.__discriminator_optimizer = optimizers.Adam(learning_rate, beta_1=0.5)
+
+        self.__TF_BOARD_PATH = tf_board_path
+        if self.__TF_BOARD_PATH is not None:
+            self.__TF_BOARD = tf.summary.create_file_writer(
+                self.__TF_BOARD_PATH + datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
+        else:
+            self.__TF_BOARD = None
+
+        self._train_step_count = 0
 
     def __build(self):
         def create_generator():
@@ -242,21 +253,44 @@ class Pix2Pix256:
         return generator_loss, discriminator_loss
 
     def train(self, dataset, epoch=None, with_preview=False):
-        log = []
-
         if epoch is None:
             epoch = self.__EPOCH
-        for i in range(epoch):
-            bar = tqdm(dataset)
-            for input_image, target_image in bar:
-                generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
-                bar.set_description("Epoch {}/{}".format(i + 1, epoch))
-                bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
-                log.append([generator_loss, discriminator_loss])
-            bar.close()
+
+        if self.__TF_BOARD is not None:
+            metric_total_loss = tf.metrics.Mean("total_loss", dtype=tf.float32)
+            metric_gen_loss = tf.metrics.Mean("gen_loss", dtype=tf.float32)
+            metric_disc_loss = tf.metrics.Mean("disc_loss", dtype=tf.float32)
+            with self.__TF_BOARD.as_default():
+                for i in range(epoch):
+                    bar = tqdm(dataset)
+                    for input_image, target_image in bar:
+                        generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
+                        bar.set_description("Epoch {}/{}".format(i + 1, epoch))
+                        bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
+                        # tensorboard
+                        self._train_step_count += 1
+                        metric_gen_loss(generator_loss)
+                        metric_disc_loss(discriminator_loss)
+                        metric_total_loss(generator_loss + discriminator_loss)
+                        tf.summary.scalar("Step/generator loss", generator_loss, step=self._train_step_count)
+                        tf.summary.scalar("Step/discriminator loss", discriminator_loss, step=self._train_step_count)
+                        tf.summary.scalar("Step/total loss", generator_loss + discriminator_loss,
+                                          step=self._train_step_count)
+                    bar.close()
+                    tf.summary.scalar("Epoch/total loss", metric_total_loss.result(), step=i)
+                    tf.summary.scalar("Epoch/generator loss", metric_gen_loss.result(), step=i)
+                    tf.summary.scalar("Epoch/discriminator loss", metric_disc_loss.result(), step=i)
+
+        else:
+            for i in range(epoch):
+                bar = tqdm(dataset)
+                for input_image, target_image in bar:
+                    generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
+                    bar.set_description("Epoch {}/{}".format(i + 1, epoch))
+                    bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
+                bar.close()
         if with_preview:
             cv2.destroyWindow("Training")
-        return log
 
     def predict(self, sample_image):
         if sample_image is None:
