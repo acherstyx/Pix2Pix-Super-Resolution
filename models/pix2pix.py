@@ -198,7 +198,7 @@ class Pix2Pix256:
         discriminate_loss = losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(discriminator_output),
                                                                         discriminator_output)
         generate_loss = losses.MeanAbsoluteError()(real_image, generate_image)
-        return discriminate_loss * 4 + generate_loss * 100
+        return discriminate_loss * 3 + generate_loss * 100
 
     @staticmethod
     def __discriminator_loss(discriminator_real_output, discriminator_fake_output):
@@ -259,21 +259,58 @@ class Pix2Pix256:
         return log
 
     def predict(self, sample_image):
-        sample_image = (sample_image.copy() * 2.0) / 255 - 1.0
-        sample_image_target = cv2.resize(sample_image.copy(), (256, 256))
-        sample_image_resized = cv2.resize(sample_image.copy(), (128, 128))
-        sample_image_resized = cv2.resize(sample_image_resized.copy(), (256, 256))
-        sample_image_reshaped = np.reshape(sample_image_resized.copy(), (1, 256, 256, 3))
+        if sample_image is None:
+            raise ValueError
+        init_shape = np.shape(sample_image)
+        shape = [256, 256]
+        while True:
+            if shape[0] < init_shape[0]:
+                shape[0] += 256
+            else:
+                break
+        while True:
+            if shape[1] < init_shape[1]:
+                shape[1] += 256
+            else:
+                break
 
-        gen_output = self._generator(sample_image_reshaped, training=True).numpy()[0]
+        resized = cv2.resize(sample_image, (shape[1], shape[0]))
+        reshaped = (np.reshape(resized.copy(), (1, shape[0], shape[1], -1)) * 2.0) / 255 - 1.0
+        logger.info("Generator input shape: %s", reshaped.shape)
+        generate = self._generator(reshaped, training=True).numpy()[0]
 
-        gen_output = (gen_output + 1.0) / 2.0
-        sample_image_target = (sample_image_target + 1.0) / 2.0
-        sample_image_resized = (sample_image_resized + 1.0) / 2.0
+        generate = (generate + 1.0) / 2.0
+        generate = cv2.resize(generate, (init_shape[1], init_shape[0]))
 
-        return (sample_image_target,
-                sample_image_resized,
-                gen_output)
+        return (generate * 255).astype(np.uint8)
+
+    def predict_sample(self, sample_image):
+        if sample_image is None:
+            raise ValueError
+        init_shape = np.shape(sample_image)
+        shape = [256, 256]
+        while True:
+            if shape[0] < init_shape[0]:
+                shape[0] += 256
+            else:
+                break
+        while True:
+            if shape[1] < init_shape[1]:
+                shape[1] += 256
+            else:
+                break
+
+        target = cv2.resize(sample_image, (shape[1], shape[0]))
+        resized = cv2.blur(target, (6, 6))
+        reshaped = (np.reshape(resized.copy(), (1, shape[0], shape[1], -1)) * 2.0) / 255 - 1.0
+        logger.info("Generator input shape: %s", reshaped.shape)
+        generate = self._generator(reshaped, training=True).numpy()[0]
+
+        generate = (generate + 1.0) / 2.0
+        resized = cv2.resize(resized, (init_shape[1], init_shape[0]))
+        generate = cv2.resize(generate, (init_shape[1], init_shape[0]))
+
+        return sample_image.astype(np.uint8), resized.astype(np.uint8), (generate * 255).astype(np.uint8)
 
     def save(self, gen_save_path, disc_save_path):
         for a_dir in [gen_save_path, disc_save_path]:
