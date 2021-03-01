@@ -12,9 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 class Pix2Pix256:
-    def __init__(self, learning_rate=0.001, epoch=1,
+    def __init__(self,
+                 epoch=1,
+                 learning_rate=0.001,
+                 learning_rate_scheduler=None,
                  tf_board_path=None):
-        self.__LR = learning_rate
+        self.__LR_SCHEDULER = learning_rate_scheduler
         self.__EPOCH = epoch
 
         self._generator = None
@@ -33,6 +36,12 @@ class Pix2Pix256:
             self.__TF_BOARD = None
 
         self._train_step_count = 0
+
+    def __update_learning_rate(self, step):
+        if self.__LR_SCHEDULER is not None:
+            logger.info("Set learning rate to %s for epoch %s", self.__LR_SCHEDULER(step), step)
+            self._generator.lr = self.__LR_SCHEDULER(step)
+            self._discriminator.lr = self.__LR_SCHEDULER(step)
 
     def __build(self):
         def create_generator():
@@ -262,10 +271,15 @@ class Pix2Pix256:
             metric_disc_loss = tf.metrics.Mean("disc_loss", dtype=tf.float32)
             with self.__TF_BOARD.as_default():
                 for i in range(epoch):
+                    # apply learning rate scheduler if exist
+                    self.__update_learning_rate(step=self._train_step_count + 1)
+                    # task bar
                     bar = tqdm(dataset)
+                    bar.set_description("Epoch {}/{}".format(i + 1, epoch))
                     for input_image, target_image in bar:
+                        # train
                         generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
-                        bar.set_description("Epoch {}/{}".format(i + 1, epoch))
+                        # show taskbar
                         bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
                         # tensorboard
                         self._train_step_count += 1
@@ -283,10 +297,13 @@ class Pix2Pix256:
 
         else:
             for i in range(epoch):
+                # apply learning rate scheduler if exist
+                self.__update_learning_rate(step=self._train_step_count + 1)
+                # task bar
                 bar = tqdm(dataset)
+                bar.set_description("Epoch {}/{}".format(i + 1, epoch))
                 for input_image, target_image in bar:
                     generator_loss, discriminator_loss = self.__train_step(input_image, target_image, with_preview)
-                    bar.set_description("Epoch {}/{}".format(i + 1, epoch))
                     bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
                 bar.close()
         if with_preview:

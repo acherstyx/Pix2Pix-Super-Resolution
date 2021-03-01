@@ -19,15 +19,25 @@ def combine_view(image_1, image_2, image_3):
     cv2.waitKey(0)
 
 
+def lr_scheduler(step):
+    if step <= 20:
+        return 0.001
+    if step <= 40:
+        return 0.0005
+    else:
+        return 0.0001
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     dataset = ImageSampler(origin_image_dir="../data/origin",
                            batch_size=2,
                            prefetch=10,
                            shuffle=100,
-                           up_size=(256, 256),
-                           down_size=(128, 128)).get_dataset()
-    model = Pix2Pix256(learning_rate=0.0001,
+                           image_size=(256, 256),
+                           blur_kernel_size=(6, 6),
+                           blur_kernel_size_delta=3).get_dataset()
+    model = Pix2Pix256(learning_rate_scheduler=lr_scheduler,
                        tf_board_path="../logs/super_resolution/tf_board/record")
 
     try:
@@ -35,7 +45,7 @@ if __name__ == '__main__':
                    "../logs/super_resolution/save_weight/discriminator.h5")
     except OSError:
         pass
-    model.train(dataset, epoch=10, with_preview=True)
+    model.train(dataset, epoch=100, with_preview=True)
     model.save("../logs/super_resolution/save_weight/generator.h5",
                "../logs/super_resolution/save_weight/discriminator.h5")
 

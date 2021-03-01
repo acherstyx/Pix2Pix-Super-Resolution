@@ -12,21 +12,25 @@ class ImageSampler:
     def __init__(self,
                  origin_image_dir,
                  batch_size,
-                 up_size,
-                 down_size,
+                 image_size,
+                 blur_kernel_size,
+                 blur_kernel_size_delta=0,
                  shuffle=10,
                  prefetch=1,
                  low_memory=True,
                  skip_small_image=True):
         super(ImageSampler, self).__init__()
 
-        self.__BATCH_SIZE = batch_size
         self.__ORIGIN_IMAGE_DIR = origin_image_dir
-        self.__UP_SIZE = up_size
-        self.__DOWN_SIZE = down_size
+        self.__UP_SIZE = image_size
+        self.__SKIP_SMALL_IMAGE = skip_small_image
+        # td.dataset
+        self.__BATCH_SIZE = batch_size
         self.__PREFETCH = prefetch
         self.__SHUFFLE = shuffle
-        self.__SKIP_SMALL_IMAGE = skip_small_image
+        # set blur image
+        self.__BLUR_KERNEL_SIZE = blur_kernel_size
+        self.__BLUR_KERNEL_SIZE_DELTA = blur_kernel_size_delta
         # save result of first epoch in mem
         self.__LOW_MEM = low_memory
         self.__CACHE = []
@@ -78,7 +82,9 @@ class ImageSampler:
                                offset_1:offset_1 + self.__UP_SIZE[0],
                                offset_2:offset_2 + self.__UP_SIZE[1], :]
                 # get down image
-                image_down = cv.resize(cv.resize(image_up, self.__DOWN_SIZE), self.__UP_SIZE)
+                kernel = [max(1, x + random.randint(-self.__BLUR_KERNEL_SIZE_DELTA,
+                                                    self.__BLUR_KERNEL_SIZE_DELTA)) for x in self.__BLUR_KERNEL_SIZE]
+                image_down = cv.blur(image_up, tuple(kernel))
                 image_up = (image_up * 2.0) / 255 - 1.0
                 image_down = (image_down * 2.0) / 255 - 1.0
                 if not self.__LOW_MEM:
@@ -106,13 +112,13 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     loader = ImageSampler(origin_image_dir="../data/origin",
                           batch_size=1,
-                          up_size=(256, 256),
-                          down_size=(128, 128)).get_dataset()
+                          image_size=(256, 256),
+                          blur_kernel_size=(5, 5),
+                          blur_kernel_size_delta=3).get_dataset()
 
     for batch_data in loader:
         a = batch_data[0][0]
         b = batch_data[1][0]
-        # print(a.numpy().shape, b.numpy().shape)
         cv.imshow("a", (a.numpy() + 1) / 2)
         cv.imshow("b", (b.numpy() + 1) / 2)
         cv.waitKey(0)
