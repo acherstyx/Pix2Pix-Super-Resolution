@@ -12,7 +12,7 @@ class ImageSampler:
     def __init__(self,
                  origin_image_dir,
                  batch_size,
-                 image_size,
+                 output_image_size,
                  blur_kernel_size,
                  blur_kernel_size_delta=0,
                  shuffle=10,
@@ -22,7 +22,7 @@ class ImageSampler:
         super(ImageSampler, self).__init__()
 
         self.__ORIGIN_IMAGE_DIR = origin_image_dir
-        self.__UP_SIZE = image_size
+        self.__UP_SIZE = output_image_size
         self.__SKIP_SMALL_IMAGE = skip_small_image
         # td.dataset
         self.__BATCH_SIZE = batch_size
@@ -35,7 +35,7 @@ class ImageSampler:
         self.__LOW_MEM = low_memory
         self.__CACHE = []
         self._dataset = None
-        self.__load()
+        self._load()
 
     @staticmethod
     def __generate_sample_and_save(in_path, out_path, new_size, write_image=True):
@@ -56,18 +56,22 @@ class ImageSampler:
             cv.imwrite(out_path, image)
         return image
 
-    def __down_sample(self):
+    def _read_image(self):
         org_sample_image = os.listdir(self.__ORIGIN_IMAGE_DIR)
+        for index, image_file_name in enumerate(org_sample_image):
+            image_file_path = os.path.join(self.__ORIGIN_IMAGE_DIR, image_file_name)
+            if not os.path.isfile(image_file_path):
+                continue
+            image_origin = cv.imread(image_file_path)
+            if image_origin is None:
+                logger.debug("Cannot open image: %s, skip.", image_file_path)
+                continue
+            yield image_origin
+
+    def __down_sample(self):
         if not self.__CACHE:
-            for index, image_file_name in enumerate(org_sample_image):
-                image_file_path = os.path.join(self.__ORIGIN_IMAGE_DIR, image_file_name)
-                if not os.path.isfile(image_file_path):
-                    continue
-                # read image and check
-                image_origin = cv.imread(image_file_path)
-                if image_origin is None:
-                    logger.debug("Cannot open image: %s, skip.", image_file_path)
-                    continue
+            for index, image_origin in enumerate(self._read_image()):
+
                 shape = image_origin.shape
                 # get up image
                 if shape[0] < self.__UP_SIZE[0] or shape[1] < self.__UP_SIZE[1]:
@@ -95,7 +99,7 @@ class ImageSampler:
             for image_down, image_up in self.__CACHE:
                 yield image_down, image_up
 
-    def __load(self):
+    def _load(self):
         self._dataset = tf.data.Dataset.from_generator(
             generator=lambda: self.__down_sample(),
             output_types=(tf.float32, tf.float32),
@@ -112,7 +116,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     loader = ImageSampler(origin_image_dir="../data/origin",
                           batch_size=1,
-                          image_size=(256, 256),
+                          output_image_size=(256, 256),
                           blur_kernel_size=(5, 5),
                           blur_kernel_size_delta=3).get_dataset()
 

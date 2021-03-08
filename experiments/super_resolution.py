@@ -1,7 +1,7 @@
 import logging
 import cv2
 import numpy as np
-from data_loaders.generate_sample import ImageSampler
+from data_loaders.video_sample import VideoSampler
 from models.pix2pix import Pix2Pix64 as Pix2PixModel
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ def combine_view(image_1, image_2, image_3):
         shape = (shape / 1.1).astype(int)
     cv2.resizeWindow("Result", shape[1], shape[0])
     cv2.imshow("Result", combine_output)
-    print(combine_output, combine_output.min(), combine_output.max())
+    # print(combine_output, combine_output.min(), combine_output.max())
     cv2.waitKey(0)
 
 
@@ -30,11 +30,11 @@ def lr_scheduler(step):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    dataset = ImageSampler(origin_image_dir="../data/origin",
-                           batch_size=2,
+    dataset = VideoSampler(video_file="../data/film.flv",
+                           batch_size=5,
                            prefetch=10,
-                           shuffle=100,
-                           image_size=(64, 64),
+                           shuffle=1000,
+                           output_image_size=(64, 64),
                            blur_kernel_size=(6, 6),
                            blur_kernel_size_delta=3).get_dataset()
     model = Pix2PixModel(learning_rate_scheduler=lr_scheduler,
@@ -45,9 +45,9 @@ if __name__ == '__main__':
                    "../logs/super_resolution/save_weight/discriminator.h5")
     except OSError:
         pass
-    # model.train(dataset, epoch=100, with_preview=True)
-    # model.save("../logs/super_resolution/save_weight/generator.h5",
-    #            "../logs/super_resolution/save_weight/discriminator.h5")
+    model.train(dataset, epoch=1, with_preview=True)
+    model.save("../logs/super_resolution/save_weight/generator.h5",
+               "../logs/super_resolution/save_weight/discriminator.h5")
 
     sample_image = cv2.imread("../data/origin/019.jpg")
     gen_output = sample_image
