@@ -2,7 +2,7 @@ import logging
 import cv2
 import numpy as np
 from data_loaders.generate_sample import ImageSampler
-from models.pix2pix import Pix2Pix256
+from models.pix2pix import Pix2Pix64 as Pix2PixModel
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ def combine_view(image_1, image_2, image_3):
         shape = (shape / 1.1).astype(int)
     cv2.resizeWindow("Result", shape[1], shape[0])
     cv2.imshow("Result", combine_output)
-    # print(combine_output, combine_output.min(), combine_output.max())
+    print(combine_output, combine_output.min(), combine_output.max())
     cv2.waitKey(0)
 
 
@@ -34,27 +34,27 @@ if __name__ == '__main__':
                            batch_size=2,
                            prefetch=10,
                            shuffle=100,
-                           image_size=(256, 256),
+                           image_size=(64, 64),
                            blur_kernel_size=(6, 6),
                            blur_kernel_size_delta=3).get_dataset()
-    model = Pix2Pix256(learning_rate_scheduler=lr_scheduler,
-                       tf_board_path="../logs/super_resolution/tf_board/record")
+    model = Pix2PixModel(learning_rate_scheduler=lr_scheduler,
+                         tf_board_path="../logs/super_resolution/tf_board/record")
 
     try:
         model.load("../logs/super_resolution/save_weight/generator.h5",
                    "../logs/super_resolution/save_weight/discriminator.h5")
     except OSError:
         pass
-    model.train(dataset, epoch=100, with_preview=True)
-    model.save("../logs/super_resolution/save_weight/generator.h5",
-               "../logs/super_resolution/save_weight/discriminator.h5")
+    # model.train(dataset, epoch=100, with_preview=True)
+    # model.save("../logs/super_resolution/save_weight/generator.h5",
+    #            "../logs/super_resolution/save_weight/discriminator.h5")
 
-    sample_image = cv2.imread("../data/origin/1.jpg")
+    sample_image = cv2.imread("../data/origin/019.jpg")
     gen_output = sample_image
 
     target_output, gen_input, gen_output = model.predict_sample(gen_output)
-    for _ in range(2):
-        gen_output = model.predict(gen_output)
+    # for _ in range(2):
+    #     gen_output = model.predict(gen_output)
 
     combine_view(gen_input, gen_output, target_output)
     cv2.imwrite("../logs/super_resolution/target.jpg", target_output)
