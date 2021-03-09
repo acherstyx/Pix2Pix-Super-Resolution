@@ -49,7 +49,7 @@ class Pix2Pix(ABC):
         discriminate_loss = losses.BinaryCrossentropy(from_logits=True)(tf.ones_like(discriminator_output),
                                                                         discriminator_output)
         generate_loss = losses.MeanAbsoluteError()(real_image, generate_image)
-        return discriminate_loss * 3 + generate_loss * 100
+        return discriminate_loss * 3 + generate_loss * 100, discriminate_loss * 3, generate_loss * 100
 
     @staticmethod
     def _discriminator_loss(discriminator_real_output, discriminator_fake_output):
@@ -75,7 +75,8 @@ class Pix2Pix(ABC):
             discriminator_fake_output = self._discriminator([input_image, generate_image], training=True)
             discriminator_real_output = self._discriminator([input_image, target_image], training=True)
 
-            generator_loss = self._generator_loss(target_image, generate_image, discriminator_fake_output)
+            generator_loss, generator_gen_loss, generator_disc_loss = self._generator_loss(target_image, generate_image,
+                                                                                           discriminator_fake_output)
             discriminator_loss = self._discriminator_loss(discriminator_real_output, discriminator_fake_output)
 
         generator_gradient = generator_tape.gradient(generator_loss,
@@ -90,7 +91,7 @@ class Pix2Pix(ABC):
             zip(discriminator_gradient, self._discriminator.trainable_variables)
         )
 
-        return generator_loss, discriminator_loss
+        return generator_loss, discriminator_loss, generator_gen_loss, generator_disc_loss
 
     def train(self, dataset, epoch=None, with_preview=False):
         if epoch is None:
@@ -109,7 +110,9 @@ class Pix2Pix(ABC):
                     bar.set_description("Epoch {}/{}".format(i + 1, epoch))
                     for input_image, target_image in bar:
                         # train
-                        generator_loss, discriminator_loss = self._train_step(input_image, target_image, with_preview)
+                        generator_loss, discriminator_loss, gen_loss, disc_loss = self._train_step(input_image,
+                                                                                                   target_image,
+                                                                                                   with_preview)
                         # show taskbar
                         bar.set_postfix(gen_loss=generator_loss.numpy(), disc_loss=discriminator_loss.numpy())
                         # tensorboard
@@ -121,6 +124,9 @@ class Pix2Pix(ABC):
                         tf.summary.scalar("Step/discriminator loss", discriminator_loss, step=self._train_step_count)
                         tf.summary.scalar("Step/total loss", generator_loss + discriminator_loss,
                                           step=self._train_step_count)
+                        tf.summary.scalar("Step/generator loss/gen", gen_loss, step=self._train_step_count)
+                        tf.summary.scalar("Step/generator loss/disc", disc_loss, step=self._train_step_count)
+
                     bar.close()
                     tf.summary.scalar("Epoch/total loss", metric_total_loss.result(), step=i)
                     tf.summary.scalar("Epoch/generator loss", metric_gen_loss.result(), step=i)
